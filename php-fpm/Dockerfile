@@ -10,9 +10,9 @@ LABEL build-date=$BUILD_DATE \
       description="Symfony 4 PHP 7.3 Alpine" \
       usage="" \
       vcs-ref=$VCS_REF \
-      vcs-url=VCS_URL \
-      vendor="Kinguin Ltd" \
-      version='7.2' \
+      vcs-url=$VCS_URL \
+      vendor="" \
+      version='7.3' \
       schema-version="1.0"
 
 
@@ -20,15 +20,43 @@ RUN addgroup -g 1000 www && \
     adduser -D -u 1000 -G www -h /var/www www
 
 # common packages
-RUN apk add --no-cache curl git grep tini
+RUN apk add --no-cache \
+    curl \
+    git \
+    grep \
+    tini
 
 # php requiments
+# tzdata
+RUN apk add --no-cache --virtual .build-deps tzdata && \
+    cp /usr/share/zoneinfo/${TZ} /etc/localtime && \
+    echo $TZ > /etc/timezone && \
+    apk del .build-deps
+
 RUN apk add --no-cache \
+    zip \
+    libzip \
+    openssh-client \
+    openssl
+    
+# build packages
+RUN apk add --no-cache --virtual .build-deps \
+    autoconf \
     libzip-dev \
-    zip
+    $PHPIZE_DEPS \
+    openssl-dev
 
 # php extensions
-RUN docker-php-ext-configure zip --with-libzip && docker-php-ext-install zip
+RUN pecl install mongodb-1.5.3 && docker-php-ext-enable mongodb && \
+    pecl install redis-4.2.0 && docker-php-ext-enable redis && \
+    docker-php-ext-configure zip --with-libzip && docker-php-ext-install zip && \
+    docker-php-ext-install \
+        iconv \
+        bcmath
+
+# clear build packages
+RUN apk del .build-deps && \
+    rm -rf /tmp/pear
 
 COPY --chown=www:www conf/ /tmp/
 RUN mv /tmp/php.ini /usr/local/etc/php/ && \
@@ -42,8 +70,6 @@ RUN mv /tmp/php.ini /usr/local/etc/php/ && \
 
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --version=1.6.5
-# ssh client
-RUN apk add --no-cache openssh-client
 
 USER www
 
